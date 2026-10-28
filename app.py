@@ -3,7 +3,15 @@ import os
 import json
 from datetime import datetime, timezone
 
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+)
+
 import firebase_admin
 from firebase_admin import credentials, firestore
 
@@ -13,23 +21,25 @@ from firebase_admin import credentials, firestore
 # --------------------------------------------------
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "online-bookstore-local-key")
+app.secret_key = os.environ.get(
+    "SECRET_KEY",
+    "online-bookstore-local-key"
+)
 
 
 # --------------------------------------------------
-# Firebase / Firestore configuration
-# Supports Render environment variables and local use
+# Firebase configuration
+# Render: Set FIREBASE_CREDENTIALS in Environment.
+# Local: Keep firebase-key.json in the project folder.
 # --------------------------------------------------
 
 if not firebase_admin._apps:
     firebase_json = os.environ.get("FIREBASE_CREDENTIALS")
 
     if firebase_json:
-        # Render: read credentials from environment variable
         credential_data = json.loads(firebase_json)
         cred = credentials.Certificate(credential_data)
     else:
-        # Local computer: read the private JSON file
         key_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             "firebase-key.json"
@@ -37,8 +47,9 @@ if not firebase_admin._apps:
 
         if not os.path.exists(key_path):
             raise RuntimeError(
-                "Firebase credentials are missing. Set FIREBASE_CREDENTIALS "
-                "or provide firebase-key.json for local development."
+                "Firebase credentials are missing. Set "
+                "FIREBASE_CREDENTIALS on Render or provide "
+                "firebase-key.json for local development."
             )
 
         cred = credentials.Certificate(key_path)
@@ -46,7 +57,6 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
-
 books_ref = db.collection("books")
 orders_ref = db.collection("orders")
 
@@ -55,41 +65,45 @@ orders_ref = db.collection("orders")
 # Helper functions
 # --------------------------------------------------
 
+def current_time():
+    return datetime.now(timezone.utc).isoformat()
+
+
 def get_books():
     books = []
 
     for document in books_ref.stream():
-        book = document.to_dict()
+        book = document.to_dict() or {}
         book["id"] = document.id
+
+        # Ensure numeric fields have safe defaults.
+        book["price"] = float(book.get("price", 0) or 0)
+        book["stock"] = int(book.get("stock", 0) or 0)
+
         books.append(book)
 
-    return books
+    return sorted(
+        books,
+        key=lambda book: str(book.get("title", "")).lower()
+    )
 
 
 def get_orders():
     orders = []
 
     for document in orders_ref.stream():
-        order = document.to_dict()
+        order = document.to_dict() or {}
         order["id"] = document.id
         orders.append(order)
 
-    return orders
-
-
-def get_book(book_id):
-    document = books_ref.document(book_id).get()
-
-    if not document.exists:
-        return None
-
-    book = document.to_dict()
-    book["id"] = document.id
-    return book
+    return sorted(
+        orders,
+        key=lambda order: str(order.get("created_at", "")),
+        reverse=True
+    )
 
 
 def parse_book_form():
-    """Read and validate book details from an HTML form."""
     title = request.form.get("title", "").strip()
     author = request.form.get("author", "").strip()
     category = request.form.get("category", "").strip()
@@ -111,12 +125,26 @@ def parse_book_form():
         "author": author,
         "category": category,
         "price": price,
-        "stock": stock
+        "stock": stock,
     }
 
 
+def find_book(book_id):
+    document = books_ref.document(book_id).get()
+
+    if not document.exists:
+        return None
+
+    book = document.to_dict() or {}
+    book["id"] = document.id
+    book["price"] = float(book.get("price", 0) or 0)
+    book["stock"] = int(book.get("stock", 0) or 0)
+
+    return book
+
+
 # --------------------------------------------------
-# Dashboard - display all books
+# Home page / dashboard
 # --------------------------------------------------
 
 @app.route("/")
@@ -124,9 +152,10 @@ def index():
     books = get_books()
 
     total_books = len(books)
-    total_stock = sum(int(book.get("stock", 0)) for book in books)
-    total_value = sum(
-        float(book.get("price", 0)) * int(book.get("stock", 0))
+    total_stock = sum(book["stock"] for book in books)
+
+    inventory_value = sum(
+        book["price"] * book["stock"]
         for book in books
     )
 
@@ -135,12 +164,13 @@ def index():
         books=books,
         total_books=total_books,
         total_stock=total_stock,
-        total_value=total_value
+        total_value=inventory_value,
+        inventory_value=inventory_value,
     )
 
 
 # --------------------------------------------------
-# Add a new book
+# Add a book
 # --------------------------------------------------
 
 @app.route("/add", methods=["GET", "POST"])
@@ -148,7 +178,8 @@ def add_book():
     if request.method == "POST":
         try:
             book_data = parse_book_form()
-            book_data["created_at"] = datetime.now(timezone.utc)
+            book_data["created_at"] = current_time()
+
             books_ref.add(book_data)
 
             flash("Book added successfully!", "success")
@@ -161,12 +192,12 @@ def add_book():
 
 
 # --------------------------------------------------
-# Edit an existing book
+# Edit a book
 # --------------------------------------------------
 
 @app.route("/edit/<book_id>", methods=["GET", "POST"])
 def edit_book(book_id):
-    book = get_book(book_id)
+    book = find_book(book_id)
 
     if book is None:
         flash("Book not found.", "error")
@@ -204,27 +235,33 @@ def delete_book(book_id):
 
 
 # --------------------------------------------------
-# Customer orders - display and create orders
+# Customer orders
 # --------------------------------------------------
 
 @app.route("/orders", methods=["GET", "POST"])
 def orders():
     if request.method == "POST":
-        customer_name = request.form.get("customer_name", "").strip()
+        customer_name = request.form.get(
+            "customer_name", ""
+        ).strip()
+
         book_id = request.form.get("book_id", "").strip()
 
         try:
             quantity = int(request.form.get("quantity", "1"))
         except (TypeError, ValueError):
-            flash("Enter a valid order quantity.", "error")
-            return redirect(url_for("orders"))
+            quantity = 0
 
-        if not customer_name or not book_id:
-            flash("Customer name and book are required.", "error")
+        if not customer_name:
+            flash("Enter the customer name.", "error")
             return redirect(url_for("orders"))
 
         if quantity <= 0:
             flash("Quantity must be greater than zero.", "error")
+            return redirect(url_for("orders"))
+
+        if not book_id:
+            flash("Please select a book.", "error")
             return redirect(url_for("orders"))
 
         book_ref = books_ref.document(book_id)
@@ -238,31 +275,33 @@ def orders():
             if not book_snapshot.exists:
                 raise ValueError("The selected book does not exist.")
 
-            book = book_snapshot.to_dict()
-            available_stock = int(book.get("stock", 0))
+            book = book_snapshot.to_dict() or {}
+            stock = int(book.get("stock", 0) or 0)
+            price = float(book.get("price", 0) or 0)
 
-            if quantity > available_stock:
+            if stock < quantity:
                 raise ValueError(
-                    f"Only {available_stock} copies are available."
+                    f"Insufficient stock. Available quantity: {stock}."
                 )
-
-            order_data = {
-                "customer_name": customer_name,
-                "book_id": book_id,
-                "book_title": book.get("title", "Unknown book"),
-                "quantity": quantity,
-                "unit_price": float(book.get("price", 0)),
-                "total": float(book.get("price", 0)) * quantity,
-                "status": "Pending",
-                "created_at": datetime.now(timezone.utc)
-            }
 
             transaction.update(
                 book_ref,
-                {"stock": available_stock - quantity}
+                {"stock": stock - quantity}
             )
 
-            transaction.set(order_ref, order_data)
+            transaction.set(
+                order_ref,
+                {
+                    "customer_name": customer_name,
+                    "book_id": book_id,
+                    "book_title": book.get("title", "Unknown book"),
+                    "quantity": quantity,
+                    "unit_price": price,
+                    "total": price * quantity,
+                    "status": "Pending",
+                    "created_at": current_time(),
+                }
+            )
 
         try:
             create_order(transaction)
@@ -281,82 +320,70 @@ def orders():
 
 
 # --------------------------------------------------
-# Update an order's status
+# Update order status
 # --------------------------------------------------
 
 @app.route("/order-status/<order_id>", methods=["POST"])
 def update_order_status(order_id):
-    order_ref = orders_ref.document(order_id)
-    order_snapshot = order_ref.get()
-
-    if not order_snapshot.exists:
-        flash("Order not found.", "error")
-        return redirect(url_for("orders"))
-
     new_status = request.form.get("status", "").strip()
+
     allowed_statuses = {
         "Pending",
         "Processing",
         "Completed",
-        "Cancelled"
+        "Cancelled",
     }
 
     if new_status not in allowed_statuses:
         flash("Invalid order status.", "error")
         return redirect(url_for("orders"))
 
-    order = order_snapshot.to_dict()
-    old_status = order.get("status", "Pending")
+    order_ref = orders_ref.document(order_id)
+    transaction = db.transaction()
 
-    # Restore stock if an order is cancelled.
-    if old_status != "Cancelled" and new_status == "Cancelled":
-        book_ref = books_ref.document(order.get("book_id", ""))
+    @firestore.transactional
+    def change_status(transaction):
+        order_snapshot = order_ref.get(transaction=transaction)
 
-        @firestore.transactional
-        def cancel_order(transaction):
-            current_order = transaction.get(order_ref)
-            current_book = transaction.get(book_ref)
+        if not order_snapshot.exists:
+            raise ValueError("Order not found.")
 
-            if not current_order.exists:
-                raise ValueError("Order not found.")
+        order = order_snapshot.to_dict() or {}
+        old_status = order.get("status", "Pending")
 
-            current_data = current_order.to_dict()
-
-            if current_data.get("status") == "Cancelled":
-                return
-
-            if current_book.exists:
-                current_stock = int(
-                    current_book.to_dict().get("stock", 0)
-                )
-                transaction.update(
-                    book_ref,
-                    {
-                        "stock": current_stock
-                        + int(current_data.get("quantity", 0))
-                    }
-                )
-
-            transaction.update(
-                order_ref,
-                {"status": "Cancelled"}
+        if old_status == "Cancelled" and new_status != "Cancelled":
+            raise ValueError(
+                "A cancelled order cannot be reopened."
             )
 
-        try:
-            cancel_order(db.transaction())
-            flash("Order cancelled and stock restored.", "success")
-        except ValueError as error:
-            flash(str(error), "error")
+        if old_status == new_status:
+            return
 
-    elif old_status == "Cancelled" and new_status != "Cancelled":
-        flash(
-            "A cancelled order cannot be reopened automatically. "
-            "Create a new order instead.",
-            "error"
+        if new_status == "Cancelled":
+            book_ref = books_ref.document(order["book_id"])
+            book_snapshot = book_ref.get(transaction=transaction)
+
+            if book_snapshot.exists:
+                book = book_snapshot.to_dict() or {}
+                stock = int(book.get("stock", 0) or 0)
+                quantity = int(order.get("quantity", 0) or 0)
+
+                transaction.update(
+                    book_ref,
+                    {"stock": stock + quantity}
+                )
+
+        transaction.update(
+            order_ref,
+            {"status": new_status}
         )
-    else:
-        order_ref.update({"status": new_status})
+
+    try:
+        change_status(transaction)
         flash("Order status updated successfully!", "success")
+
+    except ValueError as error:
+        flash(str(error), "error")
 
     return redirect(url_for("orders"))
 
@@ -368,55 +395,49 @@ def update_order_status(order_id):
 @app.route("/order-delete/<order_id>", methods=["POST"])
 def delete_order(order_id):
     order_ref = orders_ref.document(order_id)
-    order_snapshot = order_ref.get()
+    transaction = db.transaction()
 
-    if not order_snapshot.exists:
-        flash("Order not found.", "error")
-        return redirect(url_for("orders"))
+    @firestore.transactional
+    def remove_order(transaction):
+        order_snapshot = order_ref.get(transaction=transaction)
 
-    order = order_snapshot.to_dict()
+        if not order_snapshot.exists:
+            raise ValueError("Order not found.")
 
-    # Return stock when deleting an order that is not cancelled.
-    if order.get("status") != "Cancelled":
-        book_id = order.get("book_id", "")
-        book_ref = books_ref.document(book_id)
+        order = order_snapshot.to_dict() or {}
 
-        @firestore.transactional
-        def remove_order(transaction):
-            current_order = transaction.get(order_ref)
+        # Restore stock if the order was not already cancelled.
+        if order.get("status") != "Cancelled":
+            book_id = order.get("book_id")
 
-            if not current_order.exists:
-                return
+            if book_id:
+                book_ref = books_ref.document(book_id)
+                book_snapshot = book_ref.get(transaction=transaction)
 
-            current_data = current_order.to_dict()
-            current_book = transaction.get(book_ref)
+                if book_snapshot.exists:
+                    book = book_snapshot.to_dict() or {}
+                    stock = int(book.get("stock", 0) or 0)
+                    quantity = int(order.get("quantity", 0) or 0)
 
-            if (
-                current_data.get("status") != "Cancelled"
-                and current_book.exists
-            ):
-                stock = int(current_book.to_dict().get("stock", 0))
-                transaction.update(
-                    book_ref,
-                    {
-                        "stock": stock
-                        + int(current_data.get("quantity", 0))
-                    }
-                )
+                    transaction.update(
+                        book_ref,
+                        {"stock": stock + quantity}
+                    )
 
-            transaction.delete(order_ref)
+        transaction.delete(order_ref)
 
-        remove_order(db.transaction())
-    else:
-        order_ref.delete()
+    try:
+        remove_order(transaction)
+        flash("Order deleted successfully!", "success")
 
-    flash("Order deleted successfully.", "success")
+    except ValueError as error:
+        flash(str(error), "error")
+
     return redirect(url_for("orders"))
 
 
 # --------------------------------------------------
 # Run locally
-# Render starts the app using: gunicorn app:app
 # --------------------------------------------------
 
 if __name__ == "__main__":
