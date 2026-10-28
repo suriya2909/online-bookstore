@@ -1,48 +1,18 @@
-
 {% extends "base.html" %}
 {% block title %}Edit Book | PageNest{% endblock %}
 {% block content %}
-<header class="topbar">
-  <div>
-    <h1>Edit Book</h1>
-    <p class="subtitle">Update the details of this book.</p>
-  </div>
-  <a class="button light" href="/">← Back to Inventory</a>
-</header>
-
+<header class="topbar"><div><h1>Edit Book</h1><p class="subtitle">Update the details of this book.</p></div><a class="button light" href="{{ url_for('index') }}">← Back to Inventory</a></header>
 <section class="panel">
   <h2>Book Information</h2>
-  <form method="POST">
+  <form method="POST" action="{{ url_for('edit_book', book_id=book.id) }}">
     <div class="form-grid">
-      <div class="field">
-        <label for="title">Book Title *</label>
-        <input id="title" name="title" value="{{ book.title }}" required>
-      </div>
-      <div class="field">
-        <label for="author">Author *</label>
-        <input id="author" name="author" value="{{ book.author }}" required>
-      </div>
-      <div class="field">
-        <label for="category">Category</label>
-        <select id="category" name="category">
-          {% for c in ['General','Fiction','Technology','Business','Science','Biography','Self Help','Education'] %}
-          <option value="{{ c }}" {% if book.category|default('General') == c %}selected{% endif %}>{{ c }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label for="price">Price (₹) *</label>
-        <input id="price" name="price" type="number" min="0" step="0.01" value="{{ book.price }}" required>
-      </div>
-      <div class="field">
-        <label for="quantity">Stock Quantity *</label>
-        <input id="quantity" name="quantity" type="number" min="0" value="{{ book.quantity }}" required>
-      </div>
+      <div class="field"><label for="title">Book Title *</label><input id="title" name="title" value="{{ book.title }}" required></div>
+      <div class="field"><label for="author">Author *</label><input id="author" name="author" value="{{ book.author }}" required></div>
+      <div class="field"><label for="category">Category</label><select id="category" name="category">{% for c in ['General','Fiction','Technology','Business','Science','Biography','Self Help','Education'] %}<option value="{{ c }}" {% if book.category == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="price">Price (₹) *</label><input id="price" name="price" type="number" min="0" step="0.01" value="{{ book.price }}" required></div>
+      <div class="field"><label for="stock">Stock Quantity *</label><input id="stock" name="stock" type="number" min="0" step="1" value="{{ book.stock }}" required></div>
     </div>
-    <div class="form-actions">
-      <button class="button" type="submit">Save Changes</button>
-      <a class="button light" href="/">Cancel</a>
-    </div>
+    <div class="form-actions"><button class="button" type="submit">Save Changes</button><a class="button light" href="{{ url_for('index') }}">Cancel</a></div>
   </form>
 </section>
 {% endblock %}
