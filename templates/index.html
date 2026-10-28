@@ -1,139 +1,41 @@
-
 {% extends "base.html" %}
 {% block title %}Book Inventory | PageNest{% endblock %}
-
 {% block content %}
 <header class="topbar">
-  <div>
-    <h1>Book Inventory</h1>
-    <p class="subtitle">Manage your collection and keep every story in stock.</p>
-  </div>
-  <a class="button" href="/add">＋ Add New Book</a>
+  <div><h1>Book Inventory</h1><p class="subtitle">Manage your collection and keep every story in stock.</p></div>
+  <a class="button" href="{{ url_for('add_book') }}">＋ Add New Book</a>
 </header>
 
 <section class="stats">
-  <div class="stat">
-    <span class="stat-icon">▤</span>
-    <div class="stat-label">Total Titles</div>
-    <div class="stat-value">{{ total_books|default(0) }}</div>
-  </div>
-
-  <div class="stat">
-    <span class="stat-icon">₹</span>
-    <div class="stat-label">Inventory Value</div>
-    <div class="stat-value">₹{{ "%.2f"|format(inventory_value|default(0)|float) }}</div>
-  </div>
-
-  <div class="stat">
-    <span class="stat-icon">⚑</span>
-    <div class="stat-label">Low Stock Titles</div>
-    <div class="stat-value">{{ low_stock|default(0) }}</div>
-  </div>
-
-  <div class="stat">
-    <span class="stat-icon">▣</span>
-    <div class="stat-label">Customer Orders</div>
-    <div class="stat-value">{{ total_orders|default(0) }}</div>
-  </div>
+  <div class="stat"><span class="stat-icon">▤</span><div class="stat-label">Total Titles</div><div class="stat-value">{{ total_books|default(0) }}</div></div>
+  <div class="stat"><span class="stat-icon">₹</span><div class="stat-label">Inventory Value</div><div class="stat-value">₹{{ "%.2f"|format(inventory_value|default(0)|float) }}</div></div>
+  <div class="stat"><span class="stat-icon">⚑</span><div class="stat-label">Low Stock Titles</div><div class="stat-value">{{ low_stock|default(0) }}</div></div>
+  <div class="stat"><span class="stat-icon">▣</span><div class="stat-label">Customer Orders</div><div class="stat-value">{{ total_orders|default(0) }}</div></div>
 </section>
 
 <section class="panel">
-  <div class="toolbar">
-    <div>
-      <h2>All Books</h2>
-      <p class="subtitle">Your complete bookstore collection</p>
-    </div>
-    <input
-      id="search"
-      class="search"
-      placeholder="Search title or author..."
-      oninput="filterBooks()"
-    >
-  </div>
-
-  <div class="table-wrap">
-    <table id="bookTable">
-      <thead>
-        <tr>
-          <th>Book</th>
-          <th>Category</th>
-          <th>Price</th>
-          <th>Stock</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        {% for b in books %}
-        <tr>
-          <td>
-            <span class="book-icon">▤</span>
-            <span style="display:inline-block;vertical-align:middle">
-              <span class="book-title">{{ b.title|default('Untitled') }}</span><br>
-              <span class="small">by {{ b.author|default('Unknown Author') }}</span>
-            </span>
-          </td>
-
-          <td>{{ b.category|default('General') }}</td>
-
-          <td>₹{{ "%.2f"|format(b.price|default(0)|float) }}</td>
-
-          <td>
-            {% set book_stock = b.stock|default(0)|int %}
-            {% if book_stock <= 5 %}
-              <span class="badge low">{{ book_stock }} left</span>
-            {% else %}
-              <span class="badge">{{ book_stock }} in stock</span>
-            {% endif %}
-          </td>
-
-          <td>
-            <div class="actions">
-              <a class="action-link" href="/edit/{{ b.id }}">Edit</a>
-
-              <form
-                method="POST"
-                action="/delete/{{ b.id }}"
-                onsubmit="return confirm('Delete this book?')"
-              >
-                <button
-                  class="action-link"
-                  type="submit"
-                  style="border:0;cursor:pointer"
-                >
-                  Delete
-                </button>
-              </form>
-            </div>
-          </td>
-        </tr>
-
-        {% else %}
-        <tr>
-          <td colspan="5">
-            <div class="empty">
-              <div style="font-size:35px">📚</div>
-              <h3>No books yet</h3>
-              <p>Add your first book to start building your inventory.</p>
-              <a class="button" href="/add">Add First Book</a>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <div class="toolbar"><div><h2>All Books</h2><p class="subtitle">Your complete bookstore collection</p></div><input id="search" class="search" placeholder="Search title or author..." oninput="filterBooks()"></div>
+  <div class="table-wrap"><table id="bookTable">
+    <thead><tr><th>Book</th><th>Category</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for b in books %}
+      <tr>
+        <td><span class="book-icon">▤</span><span style="display:inline-block;vertical-align:middle"><span class="book-title">{{ b.title }}</span><br><span class="small">by {{ b.author }}</span></span></td>
+        <td>{{ b.category }}</td><td>₹{{ "%.2f"|format(b.price|float) }}</td>
+        <td>{% if b.stock <= 5 %}<span class="badge low">{{ b.stock }} left</span>{% else %}<span class="badge">{{ b.stock }} in stock</span>{% endif %}</td>
+        <td><div class="actions"><a class="action-link" href="{{ url_for('edit_book', book_id=b.id) }}">Edit</a>
+          <form method="POST" action="{{ url_for('delete_book', book_id=b.id) }}" onsubmit="return confirm('Delete this book?')"><button class="action-link" type="submit" style="border:0;cursor:pointer">Delete</button></form></div></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5"><div class="empty"><div style="font-size:35px">📚</div><h3>No books yet</h3><p>Add your first book to start building your inventory.</p><a class="button" href="{{ url_for('add_book') }}">Add First Book</a></div></td></tr>
+    {% endfor %}
+    </tbody></table></div>
 </section>
-
 <script>
 function filterBooks() {
-  const searchInput = document.getElementById("search");
-  const term = searchInput.value.toLowerCase();
-
+  const term = document.getElementById("search").value.toLowerCase();
   document.querySelectorAll("#bookTable tbody tr").forEach(row => {
-    row.style.display = row.innerText.toLowerCase().includes(term)
-      ? ""
-      : "none";
+    row.style.display = row.innerText.toLowerCase().includes(term) ? "" : "none";
   });
 }
 </script>
