@@ -1,0 +1,53 @@
+
+{% extends "base.html" %}
+{% block title %}Add Book | PageNest{% endblock %}
+{% block content %}
+<header class="topbar">
+  <div>
+    <h1>Add a New Book</h1>
+    <p class="subtitle">Add a title to your bookstore collection.</p>
+  </div>
+  <a class="button light" href="/">← Back to Inventory</a>
+</header>
+
+<section class="panel">
+  <h2>Book Information</h2>
+  <form method="POST">
+    <div class="form-grid">
+      <div class="field">
+        <label for="title">Book Title *</label>
+        <input id="title" name="title" placeholder="e.g. Atomic Habits" required>
+      </div>
+      <div class="field">
+        <label for="author">Author *</label>
+        <input id="author" name="author" placeholder="e.g. James Clear" required>
+      </div>
+      <div class="field">
+        <label for="category">Category</label>
+        <select id="category" name="category">
+          <option>General</option>
+          <option>Fiction</option>
+          <option>Technology</option>
+          <option>Business</option>
+          <option>Science</option>
+          <option>Biography</option>
+          <option>Self Help</option>
+          <option>Education</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="price">Price (₹) *</label>
+        <input id="price" name="price" type="number" min="0" step="0.01" placeholder="499.00" required>
+      </div>
+      <div class="field">
+        <label for="quantity">Stock Quantity *</label>
+        <input id="quantity" name="quantity" type="number" min="0" placeholder="25" required>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="button" type="submit">Save Book</button>
+      <a class="button light" href="/">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

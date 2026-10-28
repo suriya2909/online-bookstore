@@ -1,0 +1,88 @@
+
+{% extends "base.html" %}
+{% block title %}Customer Orders | PageNest{% endblock %}
+{% block content %}
+<header class="topbar">
+  <div>
+    <h1>Customer Orders</h1>
+    <p class="subtitle">Create orders and track their fulfilment status.</p>
+  </div>
+  <a class="button light" href="/">← Back to Inventory</a>
+</header>
+
+<section class="panel">
+  <h2>Place a New Order</h2>
+  {% if books %}
+  <form method="POST">
+    <div class="form-grid">
+      <div class="field">
+        <label for="customer">Customer Name *</label>
+        <input id="customer" name="customer" placeholder="Enter customer name" required>
+      </div>
+      <div class="field">
+        <label for="book_id">Select Book *</label>
+        <select id="book_id" name="book_id" required>
+          {% for b in books %}
+          {% if b.quantity|int > 0 %}
+          <option value="{{ b.id }}">{{ b.title }} — ₹{{ "%.2f"|format(b.price|float) }} ({{ b.quantity }} available)</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="quantity">Quantity *</label>
+        <input id="quantity" name="quantity" type="number" min="1" value="1" required>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="button" type="submit">＋ Place Order</button>
+    </div>
+  </form>
+  {% else %}
+  <p class="subtitle">Add books with available stock before placing an order.</p>
+  <br><a class="button" href="/add">Add a Book</a>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>All Orders</h2>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Order ID</th><th>Customer</th><th>Book</th>
+        <th>Quantity</th><th>Status</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for o in orders %}
+      <tr>
+        <td>#{{ o.id[:7] }}</td>
+        <td class="book-title">{{ o.customer }}</td>
+        <td>{{ o.book_title }}</td>
+        <td>{{ o.quantity }}</td>
+        <td><span class="badge {% if o.status == 'Pending' %}pending{% elif o.status == 'Shipped' %}shipped{% elif o.status == 'Cancelled' %}cancelled{% endif %}">{{ o.status }}</span></td>
+        <td>
+          <div class="actions">
+            <form method="POST" action="/order-status/{{ o.id }}">
+              <select name="status" aria-label="Order status" style="width:125px;padding:7px;font-size:12px">
+                {% for s in ['Pending','Processing','Shipped','Delivered','Cancelled'] %}
+                <option {% if o.status == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+              </select>
+              <button class="action-link" type="submit">Save</button>
+            </form>
+            <form method="POST" action="/order-delete/{{ o.id }}" onsubmit="return confirm('Delete this order?')">
+              <button class="action-link" type="submit">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6"><div class="empty">No customer orders yet.</div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

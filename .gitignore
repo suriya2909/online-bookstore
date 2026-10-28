@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+firebase-key.json
+.env
+bookstore.db
+.vscode/
